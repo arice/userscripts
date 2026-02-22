@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Addigy GoLive - Watchman ID Linker
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  Turns Watchman ID values on Addigy GoLive device pages into clickable links to your Watchman Monitoring console
+// @version      1.2
+// @description  Adds a Watchman Monitoring link to the top action bar and linkifies the Watchman ID in the facts table on Addigy GoLive device pages
 // @match        https://app.addigy.com/devices/*
 // @grant        none
 // @run-at       document-idle
@@ -13,10 +13,16 @@
 // ============================================================
 // ABOUT
 // ============================================================
-// On Addigy GoLive device pages, the Watchman Monitoring computer ID
-// is displayed as plain text. This script turns it into a clickable
-// link that opens the corresponding computer page in your Watchman
-// Monitoring console.
+// On Addigy GoLive device pages, the Watchman Monitoring computer
+// ID is displayed as plain text deep in the Device Facts table.
+// This script:
+//
+// 1. Adds a Watchman Monitoring button to the action bar at the
+//    top of the device page (next to Start Chat, LiveDesktop,
+//    etc.) so you can jump to Watchman without scrolling.
+//
+// 2. Turns the Watchman ID in the Device Facts table into a
+//    clickable link.
 //
 // INSTALLATION
 // ============================================================
@@ -25,6 +31,7 @@
 // 2. Click the Tampermonkey icon > "Create a new script"
 // 3. Paste this entire file and save (Ctrl+S / Cmd+S)
 // 4. Set your WATCHMAN_SUBDOMAIN below
+//
 //
 // CONFIGURATION
 // ============================================================
@@ -43,6 +50,9 @@
 //   the script is toggled on in the Tampermonkey dashboard.
 // - Link goes to the wrong place? Verify your subdomain by
 //   visiting https://yoursubdomain.monitoringclient.com directly.
+// - Top bar button doesn't appear? The script needs to find the
+//   Watchman ID in the facts table first. Make sure the device
+//   has Watchman Monitoring installed.
 //
 // LICENSE: MIT
 // ============================================================
@@ -65,18 +75,37 @@
 
   const WATCHMAN_BASE_URL = `https://${WATCHMAN_SUBDOMAIN}.monitoringclient.com/computers/`;
   const WATCHMAN_ID_PATTERN = /^\d{8}-[A-Z0-9]{4}-[A-Z0-9]+$/;
+  const TOP_BUTTON_ID = 'watchman-top-link';
 
-  function linkifyWatchmanIDs() {
+  // Lighthouse/watchtower icon as inline SVG
+  const WATCHMAN_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" class="m-r-half" style="vertical-align: middle;">
+    <path fill="currentColor" d="M12 2L8.5 7H7v2h1.06L6 22h5v-4c0-.55.45-1 1-1s1 .45 1 1v4h5L15.94 9H17V7h-1.5L12 2zm-1.5 7h3l.6 3h-4.2l.6-3z"/>
+  </svg>`;
+
+  function getWatchmanID() {
     const cells = document.querySelectorAll('td, th, span, div');
+    for (const cell of cells) {
+      if (cell.textContent.trim() === 'Watchman ID') {
+        const valueCell =
+          cell.nextElementSibling ||
+          cell.closest('tr')?.querySelector('td:last-child');
+        if (valueCell) {
+          const text = valueCell.textContent.trim();
+          if (WATCHMAN_ID_PATTERN.test(text)) return text;
+        }
+      }
+    }
+    return null;
+  }
 
+  function linkifyTable() {
+    const cells = document.querySelectorAll('td, th, span, div');
     cells.forEach((cell) => {
       if (cell.textContent.trim() === 'Watchman ID') {
         const valueCell =
           cell.nextElementSibling ||
           cell.closest('tr')?.querySelector('td:last-child');
-
         if (!valueCell || valueCell.querySelector('a')) return;
-
         const idText = valueCell.textContent.trim();
         if (WATCHMAN_ID_PATTERN.test(idText)) {
           const link = document.createElement('a');
@@ -93,10 +122,49 @@
     });
   }
 
-  linkifyWatchmanIDs();
+  function injectTopButton(watchmanID) {
+    if (document.getElementById(TOP_BUTTON_ID)) return;
+
+    // Find the action bar: the section containing the "Start Chat" button
+    const startChatBtn = Array.from(document.querySelectorAll('button.button.is-link'))
+      .find(btn => btn.textContent.trim().includes('Start Chat'));
+
+    if (!startChatBtn) return;
+
+    const actionBar = startChatBtn.parentElement;
+    if (!actionBar) return;
+
+    // Create a link styled as a button to match the existing action buttons
+    const btn = document.createElement('a');
+    btn.id = TOP_BUTTON_ID;
+    btn.href = WATCHMAN_BASE_URL + watchmanID;
+    btn.target = '_blank';
+    btn.rel = 'noopener noreferrer';
+    btn.className = 'button is-link m-l-half';
+    btn.innerHTML = WATCHMAN_ICON_SVG + ' Watchman';
+    btn.style.textDecoration = 'none';
+
+    // Insert before the Refresh Data dropdown (last child), or just append
+    const refreshDropdown = actionBar.querySelector('.dropdown');
+    if (refreshDropdown) {
+      actionBar.insertBefore(btn, refreshDropdown);
+    } else {
+      actionBar.appendChild(btn);
+    }
+  }
+
+  function run() {
+    const watchmanID = getWatchmanID();
+    if (watchmanID) {
+      linkifyTable();
+      injectTopButton(watchmanID);
+    }
+  }
+
+  run();
 
   const observer = new MutationObserver(() => {
-    linkifyWatchmanIDs();
+    run();
   });
 
   observer.observe(document.body, {
