@@ -4,9 +4,17 @@ A Tampermonkey userscript that turns plain-text **Watchman Monitoring computer I
 
 ## Before & After
 
-| Before | After |
-|--------|-------|
-| `20260222-ABCD-NCC1701` (plain text) | [20260222-ABCD-NCC1701](https://yoursubdomain.monitoringclient.com/computers/20260222-ABCD-NCC1701) (clickable link) |
+**Before:**
+
+| | |
+|---|---|
+| Watchman ID | `20230523-BORM-N28567` |
+
+**After:**
+
+| | |
+|---|---|
+| Watchman ID | [20230523-BORM-N28567](https://yoursubdomain.monitoringclient.com/computers/20230523-BORM-N28567) |
 
 ## Prerequisites
 
